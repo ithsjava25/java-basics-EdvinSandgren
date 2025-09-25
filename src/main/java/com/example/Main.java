@@ -1,10 +1,10 @@
 package com.example;
 
 import com.example.api.ElpriserAPI;
-
 import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
+
 
 public class Main {
     public static void main(String[] args) {
@@ -15,6 +15,7 @@ public class Main {
         else
             printHelp();
     }
+
 
     private static void printHelp() {
         System.out.println("""
