@@ -16,12 +16,8 @@ public class Main {
 
         if(args.length != 0){
             ElpriserAPI elpriserAPI = new ElpriserAPI();
-            if(args[0].equals("--zone"))
-                determineUsage(args, elpriserAPI);
-            else
-                printHelp();
-        }
-        else{
+            determineUsage(args, elpriserAPI);
+        }else{
              printHelp();
         }
     }
@@ -37,31 +33,34 @@ public class Main {
     }
 
     private static void determineUsage(String[] args, ElpriserAPI priceList) {
-        if (args.length == 2) {
-            ElpriserAPI.Prisklass zone = getZone(args);
-            if (zone == null) return;
-            printPrices(getMergedList(priceList, zone, LocalDate.now()));
-        } else {
-            switch (args.length < 5 ? args[2] : args[4]) {
-                case "--charging" -> printChargePrice(args, priceList);
-                case "--sorted" -> printSortedPrices(args, priceList);
-                case "--date" -> printPricesForDate(args, priceList);
-                default -> printHelp();
+        ElpriserAPI.Prisklass zone = null;
+        LocalDate parsedDate = LocalDate.now();
+        int chargeDuration = -1;
+        boolean sorted = false;
+
+        for (int i = 0; i < args.length; i++) {
+            switch(args[i]){
+                case "--zone" -> zone = getZone(args, i);
+                case "--date" -> parsedDate = getParsedDate(args, i);
+                case "--charging" -> chargeDuration = getChargeDuration(args, i);
+                case "--sorted" -> sorted = true;
+                case "--help" -> { printHelp(); return; }
             }
         }
+
+        if(zone == null){
+            printHelp();
+            System.out.println("Invalid zone input");
+        }
+        else if(chargeDuration != -1)
+            printChargePrice(priceList, zone, parsedDate, chargeDuration);
+        else if(sorted)
+            printSortedPrices(priceList, zone, parsedDate);
+        else
+            printPrices(getMergedList(priceList, zone, parsedDate));
     }
 
-    private static void printPricesForDate(String[] args, ElpriserAPI priceList) {
-        LocalDate parsedDate = getParsedDate(args);
-        ElpriserAPI.Prisklass zone = getZone(args);
-        if (parsedDate == null || zone == null) return;
-
-        printPrices(getMergedList(priceList, zone, parsedDate));
-    }
-
-    private static void printSortedPrices(String[] args, ElpriserAPI priceList) {
-        LocalDate parsedDate = getParsedDate(args);
-        ElpriserAPI.Prisklass zone = getZone(args);
+    private static void printSortedPrices(ElpriserAPI priceList, ElpriserAPI.Prisklass zone, LocalDate parsedDate) {
         if (parsedDate == null || zone == null) return;
 
         List<hourOfQuarters> sortedList = getMergedList(priceList, zone, parsedDate);
@@ -74,6 +73,7 @@ public class Main {
     }
 
     private static void printPrices(List<hourOfQuarters> priceList) {
+        if(priceList == null) return;
         if(priceList.isEmpty()){
             System.out.println("Found no data");
         } else {
@@ -91,27 +91,13 @@ public class Main {
         }
     }
 
-    private static void printChargePrice(String[] args, ElpriserAPI priceList) {
-        ElpriserAPI.Prisklass zone = getZone(args);
-        if(zone == null){
-            return;
-        }
-
-        //sliding window algorithm, 2h 4h 8h
-        int chargeDuration = switch(args.length < 5 ? args[3] : args[5]){
-            case "2h" -> 2;
-            case "4h" -> 4;
-            case "8h" -> 8;
-            default -> -1;
-        };
+    private static void printChargePrice(ElpriserAPI priceList, ElpriserAPI.Prisklass zone, LocalDate parsedDate, int chargeDuration) {
+        if (parsedDate == null || zone == null) return;
 
         if(chargeDuration == -1){
             printHelp();
             return;
         }
-
-        LocalDate parsedDate = getParsedDate(args);
-        if (parsedDate == null) return;
 
         List<hourOfQuarters> prices = getMergedList(priceList, zone, parsedDate);
         List<hourOfQuarters> chargeWindow;
@@ -161,44 +147,53 @@ public class Main {
         return hourList;
     }
 
-    private static ElpriserAPI.Prisklass getZone(String[] args) {
+    private static ElpriserAPI.Prisklass getZone(String[] args, int index) {
         ElpriserAPI.Prisklass zone = null;
         try {
-            switch (args[1]){
+            switch (args[index+1]){
                 case "SE1" -> zone = ElpriserAPI.Prisklass.SE1;
                 case "SE2" -> zone = ElpriserAPI.Prisklass.SE2;
                 case "SE3" -> zone = ElpriserAPI.Prisklass.SE3;
                 case "SE4" -> zone = ElpriserAPI.Prisklass.SE4;
-                default -> {
-                    printHelp();
-                    System.out.println("Invalid zone input");
-                }
             }
         } catch (IndexOutOfBoundsException e) {
-            printHelp();
+            return null;
         }
         return zone;
     }
 
-    private static LocalDate getParsedDate(String[] args) {
+    private static LocalDate getParsedDate(String[] args, int index) {
         LocalDate parsedDate;
-        if(args.length < 4){
-            parsedDate = LocalDate.now();
-        }else{
-            try {
-                parsedDate = LocalDate.parse(args[3]);
-            } catch (DateTimeParseException | IndexOutOfBoundsException e) {
-                printHelp();
-                System.out.println("Invalid date");
-                return null;
-            }
+        try {
+            parsedDate = LocalDate.parse(args[index+1]);
+        } catch (DateTimeParseException | IndexOutOfBoundsException e) {
+            printHelp();
+            System.out.println("Invalid date");
+            return null;
         }
         return parsedDate;
     }
 
-    private static List<hourOfQuarters> getMergedList(ElpriserAPI priceList, ElpriserAPI.Prisklass zone, LocalDate date) {
-        List<ElpriserAPI.Elpris> mergedList = priceList.getPriser(date, zone);
-        mergedList.addAll(priceList.getPriser(date.plusDays(1), zone));
+    private static int getChargeDuration(String[] args, int index) {
+        int chargeDuration;
+        try {
+            chargeDuration = switch(args[index+1]){
+                case "2h" -> 2;
+                case "4h" -> 4;
+                case "8h" -> 8;
+                default -> -1;
+            };
+        } catch (IndexOutOfBoundsException e) {
+            chargeDuration = -1;
+        }
+        return chargeDuration;
+    }
+
+    private static List<hourOfQuarters> getMergedList(ElpriserAPI priceList, ElpriserAPI.Prisklass zone, LocalDate parsedDate) {
+        if (parsedDate == null || zone == null) return null;
+
+        List<ElpriserAPI.Elpris> mergedList = priceList.getPriser(parsedDate, zone);
+        mergedList.addAll(priceList.getPriser(parsedDate.plusDays(1), zone));
         return convertQuartersToHours(mergedList);
     }
 
